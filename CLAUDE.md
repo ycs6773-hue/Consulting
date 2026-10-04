@@ -15,12 +15,14 @@
 - NEVER: 고객 메일 발송/회신은 사용자 승인 없이 하지 않음.
 - NEVER: 고객 데이터·결과를 저장소 외부 서비스로 전송하지 않음.
 - NEVER: `results/`(해석 산출물, .aedt)를 커밋하지 않음.
+- NEVER: `synthetic.py` 산출물(워터마크 보고서 포함)을 고객에게 전달하지 않음.
 
 ## 파일 참조
 - 해석 계획/질문 리스트: docs/plan.md
 - 현재 Phase/실행 방법: docs/current_context.md
 - 교훈/주의사항: docs/claude_lessons.md
 - 설정: hfss_patch/configs/*.yaml / 실행: `python -m hfss_patch.run --config ...`
+- 보고서: `python -m hfss_patch.report --config ... [--synthetic]` (analytic → postprocess → plots → report)
 
 ## Core Principles
 - 설정(YAML) → 순수 Python 기하 정의 → PyAEDT 실행부 분리 (AEDT 없이 테스트 가능).

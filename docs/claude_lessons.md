@@ -26,3 +26,24 @@
 ### L6. 환경 제약
 - 클라우드 컨테이너: PyPI에서 ansys-aedt-core 설치 불가(네트워크 정책), GitHub 소스 clone은 가능.
   → API 검증은 소스 sparse checkout으로 수행, 실행 검증은 fake Hfss(MagicMock) 테스트로 대체.
+
+## 2026-10-04 — P2/P3
+
+### L7. 패치 edge 저항은 G1 근사식(W/120λ0) 쓰지 말 것
+- W≈0.3λ0에서는 W≪λ0 근사가 깨짐: 근사 197 Ω vs 적분 G1+G12 321 Ω → y0 9.8 → 10.9 mm.
+- analytic.py는 Balanis 예제 14.1/14.3과 테스트로 고정 (회귀 방지).
+
+### L8. E/H-plane은 급전 방향이 결정
+- 급전이 y축 → E-plane = yz = φ 90°, H-plane = φ 0°. 계획서 초안의 φ=0 E-plane은 오류였음.
+- θ 0–180 cut 하나는 반쪽 → φ와 φ+180을 합쳐 −180..180 full cut으로 만들어야 HPBW/F/B 계산 가능.
+
+### L9. 사양 판정은 숫자로 먼저 확인 — "ISM 전대역 -10 dB" 목표는 FR-4 1.6 mm로 비현실적
+- 무손실 VSWR2 BW 1.1 %, 손실 포함 Q≈28 → -10 dB BW ≈ 56 MHz < 83.5 MHz. 효율 ≈ 44 %.
+- 승인 기준이라도 물리적으로 미달 예상이면 해석 전 사용자에게 즉시 보고.
+
+### L10. 테스트 기대값도 손계산으로 검증
+- notch BW 71.6 MHz를 ISM pass로 잘못 기대 → 판정 로직이 맞았음. 기대값을 먼저 의심하되 근거 계산으로 확정.
+
+### L11. 환경: 이 컨테이너의 soffice는 모든 파일 변환 실패("source file could not be loaded")
+- docx 렌더 검증 대신: python-docx 재로딩 + 텍스트 추출 + 그림 PNG 직접 확인.
+- python-docx 기본 템플릿의 settings.xml w:zoom percent 누락은 XSD 경고일 뿐 Word 열기에는 문제 없음.

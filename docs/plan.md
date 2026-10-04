@@ -15,8 +15,8 @@
 | ε_eff | 4.086 | |
 | ΔL (fringing) | 0.74 mm | Hammerstad |
 | Patch L | 29.4 mm | 공진 길이 (해석 후 ±1 mm 튜닝) |
-| Edge R_in | ≈197 Ω | 단일 슬롯 근사 |
-| Inset 깊이 y0 | ≈9.8 mm | 50 Ω 매칭, 스윕 대상 |
+| Edge R_in | ≈321 Ω | G1+G12 적분식 (P2에서 정정, 초안 197 Ω은 근사식 오류) |
+| Inset 깊이 y0 | ≈10.9 mm | 50 Ω 매칭, 스윕 8–13 mm |
 | Inset gap | 1.0 mm | 스윕 대상 |
 | 50 Ω Feed 폭 | ≈3.0 mm | FR-4 1.6 mm microstrip |
 | GND/기판 크기 | ≈70 × 80 mm | 패치 + 6h 이상 여유, ~λ0/2 |
@@ -36,7 +36,7 @@
 
 - S11 (dB) / 공진 주파수 / -10 dB 대역폭
 - 입력 임피던스 (Smith chart), VSWR
-- 2D 방사패턴 (E-plane φ=0°, H-plane φ=90°), 3D Gain
+- 2D 방사패턴 (급전 y축 → E-plane φ=90°, H-plane φ=0°), 3D Gain
 - Peak Gain / Directivity / 방사효율 / 교차편파(XPD)
 - E-field / Surface current 분포
 - 수렴 이력(Adaptive passes, ΔS), 메쉬 통계 → 재현성 근거
@@ -69,6 +69,6 @@
 ## 6. 작업 Phase (승인 후)
 
 - P1 ✅: `hfss_patch/` PyAEDT 스크립트 (설계 파라미터 YAML, 로깅, 예외 처리, release_desktop 보장)
-- P2: 해석적 계산 모듈 + 단위 테스트 (초기치 재현성)
-- P3: 결과 후처리 + Word 리포트 생성기 (python-docx)
+- P2 ✅: 해석적 계산 모듈 + 단위 테스트 (초기치 재현성)
+- P3 ✅: 결과 후처리 + Word 리포트 생성기 (python-docx)
 - P4: 사용자 PC 실행 → 결과 반영 → 보고서 완성 → 고객 회신 초안
