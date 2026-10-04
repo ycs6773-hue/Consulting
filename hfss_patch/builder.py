@@ -184,7 +184,8 @@ def export_results(hfss: "Hfss", cfg: JobConfig, out: Path, param_vars: list[str
             report_category="Far Fields",
             context=SPHERE,
             primary_sweep_variable="Theta",
-            variations={"Freq": [f0], "Phi": ["0deg", "90deg"], "Theta": ["All"]},
+            # theta 0..180 per phi; phi+180 gives the other half of each full cut (H: 0/180, E: 90/270)
+            variations={"Freq": [f0], "Phi": ["0deg", "90deg", "180deg", "270deg"], "Theta": ["All"]},
         ),
         "farfield_3d.csv": dict(
             expressions=["dB(GainTotal)"],

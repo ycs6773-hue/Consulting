@@ -79,7 +79,7 @@ def test_default_geometry_is_consistent(cfg):
     env = model.variables
     # feed runs from the port plane to the inset depth
     feed = bbox(model.feed, env)
-    assert feed[1] == pytest.approx((-40.0, -14.7 + 9.8))
+    assert feed[1] == pytest.approx((-40.0, -14.7 + 10.9))
     # air clearance on the open sides
     air = bbox(model.airbox, env)
     assert air[0] == pytest.approx((-73.0, 73.0))

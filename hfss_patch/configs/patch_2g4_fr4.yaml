@@ -17,9 +17,9 @@ substrate:
 patch:
   W: 38.0      # patch width (x)
   L: 29.4      # resonant length (y)
-  y0: 9.8      # inset depth
+  y0: 10.9     # inset depth (Rin_edge 321 ohm incl. G12)
   gap: 1.0     # inset slot gap each side of the feed
-  Wf: 3.0      # 50 ohm microstrip width
+  Wf: 3.08     # 50 ohm microstrip width (Hammerstad)
 
 board:
   Wsub: 70.0   # substrate/GND size x
@@ -46,5 +46,5 @@ farfield:
 
 parametrics:
   - {name: Param_L,   variable: L,   start: 28.0, stop: 31.0, step: 0.5}
-  - {name: Param_y0,  variable: y0,  start: 7.0,  stop: 12.0, step: 1.0}
+  - {name: Param_y0,  variable: y0,  start: 8.0,  stop: 13.0, step: 1.0}
   - {name: Param_gap, variable: gap, start: 0.5,  stop: 1.5,  step: 0.5}
