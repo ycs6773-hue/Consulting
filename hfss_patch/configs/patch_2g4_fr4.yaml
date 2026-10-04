@@ -1,0 +1,50 @@
+# 2.4 GHz inset-fed rectangular patch on FR-4 (initial values: transmission-line model).
+# All lengths in mm, frequencies in GHz.
+project:
+  name: Patch_2G4_FR4
+  design: InsetPatch
+  aedt_version: "2025.1"
+  non_graphical: true
+  cores: 4
+  output_dir: results/patch_2g4_fr4
+
+substrate:
+  material: SUB_FR4
+  er: 4.4
+  tand: 0.02
+  h: 1.6
+
+patch:
+  W: 38.0      # patch width (x)
+  L: 29.4      # resonant length (y)
+  y0: 9.8      # inset depth
+  gap: 1.0     # inset slot gap each side of the feed
+  Wf: 3.0      # 50 ohm microstrip width
+
+board:
+  Wsub: 70.0   # substrate/GND size x
+  Lsub: 80.0   # substrate/GND size y
+
+port:
+  w_factor: 10.0   # port width  = w_factor * Wf
+  h_factor: 6.0    # port height = h_factor * h
+
+air: 38.0          # radiation box clearance (>= lambda0/4 = 37.5 mm at 2.0 GHz sweep start)
+
+setup:
+  f0: 2.4
+  max_passes: 15
+  max_delta_s: 0.02
+  sweep_start: 2.0
+  sweep_stop: 2.8
+  sweep_step: 0.001
+  sweep_type: Interpolating
+
+farfield:
+  theta_step: 2.0
+  phi_step: 2.0
+
+parametrics:
+  - {name: Param_L,   variable: L,   start: 28.0, stop: 31.0, step: 0.5}
+  - {name: Param_y0,  variable: y0,  start: 7.0,  stop: 12.0, step: 1.0}
+  - {name: Param_gap, variable: gap, start: 0.5,  stop: 1.5,  step: 0.5}

@@ -3,7 +3,7 @@
 - 의뢰처: insight.cae@gmail.com (2026-10-04 수신, 제목 "HFSS 해석 의뢰")
 - 요구사항(원문): "HFSS로 2.4GHz에서 공진하는 패치안테나 설계 후 해석, 결과 보고서 전달"
 - 첨부/사양서: 없음 → 기판·급전·성능 목표 미지정 (아래 질문 리스트로 확정)
-- 상태: **Plan — 승인 대기**
+- 상태: **승인 완료(2026-10-04, 추천안 전체)** — P1 완료, 진행 상황은 docs/current_context.md
 
 ## 1. 초기 설계안 (가정: FR-4, εr=4.4, tanδ=0.02, h=1.6 mm, 35 µm Cu)
 
@@ -26,7 +26,7 @@
 1. Solution type: Modal (Driven Modal)
 2. Geometry: Substrate(box) / GND(sheet, PerfE 또는 finite cond.) / Patch+Inset+Feed(sheet)
 3. Excitation: Wave Port (기판 엣지, 폭 ≈ 6~10×Wf, 높이 ≈ 6h) — 대안 Lumped Port
-4. Boundary: Radiation box (λ0/4 ≈ 31 mm 이상 이격) 또는 PML
+4. Boundary: Radiation box (스윕 최저 2.0 GHz 기준 λ0/4 = 37.5 mm → 38 mm 이격)
 5. Setup: Adaptive @2.4 GHz, MaxDeltaS 0.02, Max passes 15
 6. Sweep: Interpolating 2.0–2.8 GHz, 1 MHz step
 7. Optimetrics: L(28–31 mm), y0(7–12 mm), gap(0.5–1.5 mm) Parametric
@@ -68,7 +68,7 @@
 
 ## 6. 작업 Phase (승인 후)
 
-- P1: `hfss_patch/` PyAEDT 스크립트 (설계 파라미터 YAML, 로깅, 예외 처리, release_desktop 보장)
+- P1 ✅: `hfss_patch/` PyAEDT 스크립트 (설계 파라미터 YAML, 로깅, 예외 처리, release_desktop 보장)
 - P2: 해석적 계산 모듈 + 단위 테스트 (초기치 재현성)
 - P3: 결과 후처리 + Word 리포트 생성기 (python-docx)
 - P4: 사용자 PC 실행 → 결과 반영 → 보고서 완성 → 고객 회신 초안
