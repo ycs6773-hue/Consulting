@@ -63,6 +63,7 @@ class ReportData:
     tuning: dict[str, float | None] = field(default_factory=dict)
     figures: dict[str, Path] = field(default_factory=dict)
     captures: dict[str, Path] = field(default_factory=dict)  # AEDT screen captures
+    s11_curve: tuple | None = None  # (freq_ghz, s11_db) for comparison overlays
     capture_status: str = "not run"
     convergence_tail: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
@@ -111,6 +112,7 @@ def analyze(cfg: JobConfig, results_dir: Path) -> ReportData:
     def do_s11() -> None:
         m, c = pp.s11_from_table(pp.read_table(results_dir / "s11.csv"))
         rd.s11 = m
+        rd.s11_curve = (c["freq_ghz"], c["s11_db"])
         rd.figures["s11"] = plots.s11_figure(c["freq_ghz"], c["s11_db"], m, figdir / "s11.png")
         if "z" in c:
             rd.figures["smith"] = plots.smith_figure(c["freq_ghz"], c["z"], m.f_res_ghz, figdir / "smith.png")
@@ -202,9 +204,10 @@ def recommendations(rd: ReportData, spec: Spec) -> list[str]:
             out.append(f"공진 주파수가 목표 대비 {df * 1e3:+.0f} MHz 벗어나 있습니다.{hint}")
         if not rd.s11.ism_pass:
             out.append(
-                f"ISM 전대역(83.5 MHz) |S11| ≤ {spec.s11_max_db:.0f} dB를 만족하지 못합니다. 단일 패치의 대역폭은 기판 "
-                f"두께/유전율로 제한되므로(현재 εr {cfg.substrate.er}, h {cfg.substrate.h} mm), 두꺼운 저유전율 기판"
-                "(예: RO4003C 1.524 mm), 공기층 적층(suspended patch), 또는 U-slot/기생 패치 적용을 권고합니다."
+                f"ISM 전대역(83.5 MHz) |S11| ≤ {spec.s11_max_db:.0f} dB를 만족하지 못합니다. 단일 패치의 대역폭은 "
+                f"기판 두께/유전율로 제한되며(현재 εr {cfg.substrate.er}, h {cfg.substrate.h} mm), 같은 두께에서 "
+                "저손실 기판으로 바꾸면 손실에 의한 대역 확장이 사라져 오히려 대역폭이 줄어듭니다. 전대역 확보에는 "
+                "공기/폼 기판(h ≈ 5 mm급), 적층(stacked) 패치, 또는 U-slot 구조 변경이 필요합니다."
             )
     g = gain_dbi(rd)
     if g is not None and g < spec.gain_min_dbi:
@@ -212,12 +215,62 @@ def recommendations(rd: ReportData, spec: Spec) -> list[str]:
         e = f"(방사 효율 {eff:.0f} %)" if eff else ""
         out.append(
             f"Peak Gain {g:.2f} dBi로 목표 {spec.gain_min_dbi:.1f} dBi에 미달합니다{e}. FR-4의 유전 손실(tanδ "
-            f"{cfg.substrate.tand})이 주 원인이며 저손실 기판(RO4003C tanδ 0.0027) 적용 시 개선이 예상됩니다."
+            f"{cfg.substrate.tand})이 주 원인이며 저손실 기판(예: RO4003C, tanδ 0.0027) 적용 시 효율·이득 개선이 "
+            "예상됩니다(대역폭은 감소)."
         )
     if rd.s11 and rd.s11.s11_min_db > spec.s11_max_db:
         out.append("임피던스 정합이 부족합니다. inset 깊이 y0 파라메트릭 결과를 참고해 y0를 재조정하십시오.")
     if not out:
         out.append("모든 승인 기준을 만족합니다. 제작 공차(±0.1 mm 식각, εr ±0.2) 민감도 확인 후 시제작을 권고합니다.")
+    return out
+
+
+def substrate_label(cfg: JobConfig) -> str:
+    s = cfg.substrate
+    return f"{s.material.removeprefix('SUB_')} (εr {s.er:g}, h {s.h:g} mm)"
+
+
+def comparison_rows(rds: list[ReportData], spec: Spec) -> list[list[Any]]:
+    """Metric rows for side-by-side substrate comparison (one column per design)."""
+
+    def cell(ok: bool | None, text: str):
+        return (text, GOOD if ok else BAD) if ok is not None else text
+
+    rows: list[list[Any]] = [
+        ["기판"] + [substrate_label(r.cfg) for r in rds],
+        ["패치 W × L"] + [f"{r.cfg.patch.W:.2f} × {r.cfg.patch.L:.2f} mm" for r in rds],
+        ["Inset y0 / Wf"] + [f"{r.cfg.patch.y0:.2f} / {r.cfg.patch.Wf:.2f} mm" for r in rds],
+    ]
+    lo, hi = spec.band_ghz
+
+    def s11_row(label: str, fn) -> None:
+        rows.append([label] + [fn(r.s11) if r.s11 else "—" for r in rds])
+
+    s11_row("공진 주파수", lambda m: cell(lo <= m.f_res_ghz <= hi, f"{m.f_res_ghz:.3f} GHz"))
+    s11_row("최소 |S11|", lambda m: cell(m.s11_min_db <= spec.s11_max_db, f"{m.s11_min_db:.1f} dB"))
+    s11_row("-10 dB 대역폭", lambda m: cell(bool(m.bw10_mhz and m.bw10_mhz >= (hi - lo) * 1e3),
+                                            _fmt(m.bw10_mhz, 1, " MHz")))
+    s11_row("ISM 최악 |S11|", lambda m: cell(m.ism_pass, f"{m.ism_worst_s11_db:.1f} dB"))
+    gains = [gain_dbi(r) for r in rds]
+    rows.append(["Peak Gain"] + [cell(g >= spec.gain_min_dbi, f"{g:.2f} dBi") if g is not None else "—" for g in gains])
+    rows.append(["방사 효율"] + [_fmt(r.antenna.get("RadiationEfficiency_pct"), 1, " %") for r in rds])
+    rows.append(["데이터"] + ["SYNTHETIC" if r.synthetic else "HFSS" for r in rds])
+    return rows
+
+
+def comparison_findings(base: ReportData, alt: ReportData, spec: Spec) -> list[str]:
+    out: list[str] = []
+    gb, ga = gain_dbi(base), gain_dbi(alt)
+    if gb is not None and ga is not None:
+        out.append(f"이득: {substrate_label(base.cfg)} {gb:.2f} dBi → {substrate_label(alt.cfg)} {ga:.2f} dBi "
+                   f"({ga - gb:+.2f} dB). 목표 {spec.gain_min_dbi:.0f} dBi "
+                   f"{'충족' if ga >= spec.gain_min_dbi else '미달'}.")
+    if base.s11 and alt.s11 and base.s11.bw10_mhz and alt.s11.bw10_mhz:
+        out.append(f"-10 dB 대역폭: {base.s11.bw10_mhz:.1f} → {alt.s11.bw10_mhz:.1f} MHz. 저손실 기판은 손실에 의한 "
+                   "대역 확장이 없어 대역폭이 줄어듭니다.")
+    if alt.s11 and not alt.s11.ism_pass:
+        out.append("두 안 모두 ISM 전대역 기준을 만족하지 못합니다. 전대역이 필수 요구라면 구조 변경(공기/폼 기판, "
+                   "적층 패치, U-slot)이 필요하며, 채널 단위 운용(예: 2.44 GHz 중심 ±15 MHz)이라면 대안 기판으로 충분합니다.")
     return out
 
 
@@ -309,8 +362,10 @@ def _fmt(v: float | None, nd: int = 2, unit: str = "") -> str:
 # --- document ------------------------------------------------------------------------------
 
 
-def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "", doc_no: str = "") -> Path:
+def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "", doc_no: str = "",
+               alt: ReportData | None = None) -> Path:
     cfg = rd.cfg
+    synthetic = rd.synthetic or (alt is not None and alt.synthetic)  # any fake data -> watermark everything
     fig = _Figures()
     cap = rd.captures
     doc = Document()
@@ -325,7 +380,7 @@ def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "
     normal.element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), FONT)
 
     hdr = sec.header.paragraphs[0]
-    if rd.synthetic:
+    if synthetic:
         _set_font(hdr.add_run("SYNTHETIC DATA — 파이프라인 미리보기용, HFSS 해석 결과 아님 / NOT FOR DELIVERY"), 9, True, BAD)
     else:
         _set_font(hdr.add_run(f"HFSS 해석 보고서 — {cfg.project.name}"), 8, color=INK2)
@@ -337,7 +392,7 @@ def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "
     _para(doc, "2.4 GHz 마이크로스트립 패치 안테나", 22, True, INK, WD_ALIGN_PARAGRAPH.CENTER)
     _para(doc, "HFSS 설계 및 전자기 해석 보고서", 16, False, INK2, WD_ALIGN_PARAGRAPH.CENTER)
     doc.add_paragraph()
-    if rd.synthetic:
+    if synthetic:
         _para(doc, "※ 본 문서는 합성(synthetic) 데이터로 생성한 양식 미리보기입니다. 수치는 실제 해석 결과가 아닙니다.",
               11, True, BAD, WD_ALIGN_PARAGRAPH.CENTER)
     for _ in range(6):
@@ -350,7 +405,7 @@ def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "
             ["문서 번호", doc_no or "—"],
             ["작성일", date.today().isoformat()],
             ["해석 도구", f"Ansys HFSS {rd.run.get('aedt_version', '—')} (PyAEDT 자동화)"],
-            ["데이터 출처", "SYNTHETIC (미리보기)" if rd.synthetic else "HFSS 해석 결과"],
+            ["데이터 출처", "SYNTHETIC (미리보기)" if synthetic else "HFSS 해석 결과"],
         ],
         [4, 11],
     )
@@ -365,6 +420,8 @@ def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "
         mark = ("적합", GOOD) if ok else ("부적합", BAD) if ok is False else ("참고", None)
         vrows.append([item, tgt, res, mark if mark[1] else mark[0]])
     _table(doc, ["항목", "목표", "결과", "판정"], vrows, [4.5, 4, 4.5, 2.5])
+    if alt is not None:
+        _para(doc, f"대안 기판 {substrate_label(alt.cfg)} 비교 결과는 8장에 정리하였습니다.", 9, color=INK2)
     _heading(doc, "주요 권고사항", 2)
     for r in recommendations(rd, spec):
         _para(doc, r, style="List Bullet")
@@ -512,6 +569,22 @@ def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "
         _para(doc, r, style="List Bullet")
 
     # Appendix
+    if alt is not None:
+        _heading(doc, f"8. 대안 비교: {substrate_label(alt.cfg)}", 1)
+        _para(doc, f"원안({substrate_label(cfg)})과 동일한 해석 조건으로 대안 기판을 설계·해석하여 비교하였습니다. "
+                   "치수는 각 기판에 대해 전송선로 모델로 재설계한 값입니다.")
+        _table(doc, ["항목", "원안", "대안"], comparison_rows([rd, alt], spec), [4, 5.5, 5.5])
+        if rd.s11_curve and alt.s11_curve:
+            path = rd.results_dir / "figures" / "compare_s11.png"
+            plots.compare_s11_figure(
+                [(substrate_label(rd.cfg), *rd.s11_curve), (substrate_label(alt.cfg), *alt.s11_curve)], path
+            )
+            fig.add(doc, path, "원안/대안 |S11| 비교")
+        for line in comparison_findings(rd, alt, spec):
+            _para(doc, line, style="List Bullet")
+        if alt.missing:
+            _para(doc, "대안 결과 누락/경고: " + "; ".join(alt.missing), 9, color=INK2)
+
     _heading(doc, "부록. 실행 정보 (재현성)", 1)
     _table(
         doc,
@@ -541,6 +614,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--results", type=Path, help="results dir (default: project.output_dir)")
     ap.add_argument("--out", type=Path, help="output .docx (default: <results>/report.docx)")
     ap.add_argument("--synthetic", action="store_true", help="first write SYNTHETIC data into --results (preview)")
+    ap.add_argument("--compare", type=Path, help="alternative design config to compare against (e.g. RO4003C)")
+    ap.add_argument("--compare-results", type=Path, help="results dir of the comparison (default: its output_dir)")
     ap.add_argument("--customer", default="")
     ap.add_argument("--doc-no", default="")
     args = ap.parse_args(argv)
@@ -552,20 +627,40 @@ def main(argv: list[str] | None = None) -> int:
         print(f"CONFIG ERROR: {exc}", file=sys.stderr)
         return 2
     results = (args.results or Path(cfg.project.output_dir)).resolve()
+    alt_cfg = None
+    if args.compare:
+        try:
+            alt_cfg = load_config(args.compare)
+        except ConfigError as exc:
+            print(f"CONFIG ERROR (--compare): {exc}", file=sys.stderr)
+            return 2
+    alt_results = (args.compare_results or Path(alt_cfg.project.output_dir)).resolve() if alt_cfg else None
+    if alt_results is not None and alt_results == results:
+        logger.error("--compare results dir must differ from the baseline results dir")
+        return 2
+
     if args.synthetic:
         from .synthetic import write_synthetic_results
 
-        write_synthetic_results(cfg, results)
-        logger.warning("SYNTHETIC data written to %s — preview only", results)
-    if not results.is_dir():
-        logger.error("results dir not found: %s", results)
-        return 2
+        for c, r in ((cfg, results), (alt_cfg, alt_results)):
+            if c is not None:
+                write_synthetic_results(c, r)
+                logger.warning("SYNTHETIC data written to %s — preview only", r)
+    for r in (results, alt_results):
+        if r is not None and not r.is_dir():
+            logger.error("results dir not found: %s", r)
+            return 2
 
     rd = analyze(cfg, results)
+    alt = analyze(alt_cfg, alt_results) if alt_cfg else None
     (results / "metrics.json").write_text(json.dumps(rd.metrics_dict(), indent=2, default=str), encoding="utf-8")
-    out = build_docx(rd, args.out or results / "report.docx", customer=args.customer, doc_no=args.doc_no)
-    logger.info("report written: %s (missing: %s)", out, rd.missing or "none")
-    return 0 if not rd.missing else 4
+    if alt is not None:
+        (alt_results / "metrics.json").write_text(json.dumps(alt.metrics_dict(), indent=2, default=str),
+                                                  encoding="utf-8")
+    out = build_docx(rd, args.out or results / "report.docx", customer=args.customer, doc_no=args.doc_no, alt=alt)
+    missing = rd.missing + ([f"[compare] {m}" for m in alt.missing] if alt else [])
+    logger.info("report written: %s (missing: %s)", out, missing or "none")
+    return 0 if not missing else 4
 
 
 if __name__ == "__main__":

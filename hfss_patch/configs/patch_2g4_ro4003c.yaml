@@ -1,0 +1,58 @@
+# Alternative: 2.4 GHz inset-fed patch on Rogers RO4003C 60 mil (comparison case vs FR-4 baseline).
+# er = 3.55 is Rogers' recommended *design* Dk for simulation (process Dk 3.38); tand 0.0027 @10 GHz.
+# Expected (analytic): efficiency ~86 % -> gain spec met, but -10 dB BW ~31 MHz (narrower than FR-4,
+# whose loss broadens the response) -> ISM full-band spec still NOT met by substrate change alone.
+# All lengths in mm, frequencies in GHz.
+project:
+  name: Patch_2G4_RO4003C
+  design: InsetPatch
+  aedt_version: "2025.1"
+  non_graphical: true
+  cores: 4
+  output_dir: results/patch_2g4_ro4003c
+
+substrate:
+  material: SUB_RO4003C
+  er: 3.55
+  tand: 0.0027
+  h: 1.524
+
+patch:
+  W: 41.4      # patch width (x)
+  L: 32.74     # resonant length (y)
+  y0: 11.9     # inset depth (Rin_edge 289 ohm incl. G12)
+  gap: 1.0     # inset slot gap each side of the feed
+  Wf: 3.44     # 50 ohm microstrip width (Hammerstad)
+
+board:
+  Wsub: 75.0
+  Lsub: 85.0
+
+port:
+  w_factor: 10.0
+  h_factor: 6.0
+
+air: 38.0          # >= lambda0/4 = 37.5 mm at 2.0 GHz sweep start
+
+setup:
+  f0: 2.4
+  max_passes: 15
+  max_delta_s: 0.02
+  sweep_start: 2.0
+  sweep_stop: 2.8
+  sweep_step: 0.001
+  sweep_type: Interpolating
+
+farfield:
+  theta_step: 2.0
+  phi_step: 2.0
+
+parametrics:
+  - {name: Param_L,   variable: L,   start: 31.5, stop: 34.0, step: 0.5}
+  - {name: Param_y0,  variable: y0,  start: 9.0,  stop: 14.0, step: 1.0}
+  - {name: Param_gap, variable: gap, start: 0.5,  stop: 1.5,  step: 0.5}
+
+capture:
+  enabled: true
+  width: 1600
+  height: 1000

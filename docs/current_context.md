@@ -17,7 +17,7 @@
 - `hfss_patch/builder.py` — Hfss(Modal) 모델링 → PerfE/Radiation/Wave Port → Setup/Sweep/FF sphere
   → Parametric(L, y0, gap) → 해석 → CSV export → release_desktop (finally)
 - `hfss_patch/run.py` — CLI (`--dry-run`, `--no-parametric`, `--no-solve`, `--version`, `--cores`)
-- `tests/` — 54개 (config/geometry, fake Hfss 세션 해제, analytic, 후처리/보고서)
+- `tests/` — 64개 (config/geometry, fake Hfss 세션 해제, analytic, 후처리/보고서)
 
 ## P2/P3 산출물
 - `analytic.py` — TL 모델(G1/G12 적분, inset y0, Hammerstad Wf, BW 추정). `python -m hfss_patch.analytic --f0 2.4 --er 4.4 --h 1.6`
@@ -44,10 +44,16 @@ python -m hfss_patch.run --config hfss_patch/configs/patch_2g4_fr4.yaml --captur
   s11_param_*.csv, convergence.prop, mesh_stats.ms, run_summary.json, logs/)
 - Exit code: 0 OK / 1 해석 실패 / 2 설정·형상 오류 / 3 PyAEDT 없음 / 4 일부 export·캡처 실패 (결과는 사용 가능)
 
+## 대안 비교안 (RO4003C 60 mil) — `configs/patch_2g4_ro4003c.yaml`
+- εr 3.55(Rogers 설계 Dk), tanδ 0.0027, h 1.524 / W 41.40, L 32.74, y0 11.90, Wf 3.44, 기판 75×85 mm
+- 해석식 예측: 효율 ≈ 86 %, Gain ≈ 6 dBi(목표 충족) / -10 dB BW ≈ 31 MHz(FR-4보다 **좁음**) → ISM 전대역은 여전히 미달
+- 실행: 동일 절차로 `--config .../patch_2g4_ro4003c.yaml` 실행 후
+  `python -m hfss_patch.report --config .../patch_2g4_fr4.yaml --compare .../patch_2g4_ro4003c.yaml` → 보고서 8장 비교
+
 ## ⚠️ 사양 리스크 (해석식/합성 모델 기반 예측 — HFSS로 확정 필요)
 - FR-4 1.6 mm 단일 패치: -10 dB BW 예상 ≈ 55~60 MHz < ISM 83.5 MHz → Q3 'ISM 전대역' 미달 가능성 높음
 - 방사 효율 ≈ 45 % (tanδ 0.02) → Peak Gain ≈ 3 dBi < 목표 4 dBi 가능성
-- 대안: RO4003C 1.524 mm / 공기층 적층 / U-slot·기생 패치 — 고객 협의 필요
+- 저손실 기판은 이득만 해결(대역폭은 감소). ISM 전대역은 공기/폼 기판·적층 패치·U-slot 구조 변경 필요 — 고객 협의
 
 ## 미검증 리스크 (첫 실행 시 확인)
 - wave port 적분선 문자열 좌표("-Lsub/2" 등) 처리 여부

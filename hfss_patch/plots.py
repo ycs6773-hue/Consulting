@@ -197,3 +197,22 @@ def parametric_figure(var: str, curves: dict[float, tuple[np.ndarray, np.ndarray
     ax.legend(loc="lower right", ncol=2)
     _despine(ax)
     return _save(fig, path)
+
+
+def compare_s11_figure(series: list[tuple[str, np.ndarray, np.ndarray]], path: Path) -> Path:
+    """Overlay |S11| of design alternatives; categorical order fixed (baseline = slot 1)."""
+    fig, ax = plt.subplots(figsize=(6.4, 3.6))
+    ax.axvspan(*ISM_BAND_GHZ, color=BAND_FILL, lw=0)
+    ax.text(sum(ISM_BAND_GHZ) / 2, 0.03, "ISM band", transform=ax.get_xaxis_transform(), ha="center",
+            va="bottom", fontsize=7, color=INK2)
+    ax.axhline(-10, color=MUTED, lw=0.8, ls="--")
+    for i, (label, f, s) in enumerate(series):
+        ax.plot(f, s, color=SERIES[i], lw=1.8, label=label)
+    ax.set_xlabel("Frequency [GHz]")
+    ax.set_ylabel("|S11| [dB]")
+    ax.set_title("|S11| — substrate comparison")
+    ax.set_ylim(-40, 0)
+    ax.grid(True, axis="y")
+    ax.legend(loc="lower left")
+    _despine(ax)
+    return _save(fig, path)
