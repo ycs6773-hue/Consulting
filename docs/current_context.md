@@ -44,6 +44,11 @@ python -m hfss_patch.run --config hfss_patch/configs/patch_2g4_fr4.yaml --captur
   s11_param_*.csv, convergence.prop, mesh_stats.ms, run_summary.json, logs/)
 - Exit code: 0 OK / 1 해석 실패 / 2 설정·형상 오류 / 3 PyAEDT 없음 / 4 일부 export·캡처 실패 (결과는 사용 가능)
 
+## 고객 커뮤니케이션
+- 2026-10-05: 사양 확인 메일 **초안** 작성 (Gmail 원 스레드 답장, **미발송** — 사용자 검토/발송 대기)
+  - 질문 8항: 대역폭(ISM 전대역 vs 채널), 정합 기준, 기판, 크기/두께, 이득/편파, 급전, 사용 환경, 산출물/납기
+  - 무회신 시 기본안: FR-4 기준안 + RO4003C 비교안으로 진행한다고 명시
+
 ## 대안 비교안 (RO4003C 60 mil) — `configs/patch_2g4_ro4003c.yaml`
 - εr 3.55(Rogers 설계 Dk), tanδ 0.0027, h 1.524 / W 41.40, L 32.74, y0 11.90, Wf 3.44, 기판 75×85 mm
 - 해석식 예측: 효율 ≈ 86 %, Gain ≈ 6 dBi(목표 충족) / -10 dB BW ≈ 31 MHz(FR-4보다 **좁음**) → ISM 전대역은 여전히 미달
