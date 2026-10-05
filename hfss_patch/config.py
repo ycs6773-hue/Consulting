@@ -76,6 +76,15 @@ class FarfieldCfg:
 
 
 @dataclass(frozen=True)
+class CaptureCfg:
+    """AEDT screen captures (graphical session after the solve). Optional YAML section."""
+
+    enabled: bool = True
+    width: int = 1600
+    height: int = 1000
+
+
+@dataclass(frozen=True)
 class ParametricCfg:
     name: str
     variable: str
@@ -95,6 +104,7 @@ class JobConfig:
     setup: SetupCfg
     farfield: FarfieldCfg
     parametrics: tuple[ParametricCfg, ...] = field(default_factory=tuple)
+    capture: CaptureCfg = field(default_factory=CaptureCfg)
     source_path: str = ""
     sha256: str = ""
 
@@ -153,11 +163,16 @@ def load_config(path: str | Path) -> JobConfig:
     if "air" not in raw:
         raise ConfigError("missing key: air")
     params = tuple(_build(ParametricCfg, p, f"parametrics[{i}]") for i, p in enumerate(raw.get("parametrics") or []))
+    cap_raw = raw.get("capture") or {}
+    if not isinstance(cap_raw, dict):
+        raise ConfigError("[capture] must be a mapping")
+    capture = _build(CaptureCfg, {**vars(CaptureCfg()), **cap_raw}, "capture")
 
     cfg = JobConfig(
         **parts,
         air=float(raw["air"]),
         parametrics=params,
+        capture=capture,
         source_path=str(path.resolve()),
         sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
     )
@@ -205,6 +220,10 @@ def validate(cfg: JobConfig) -> None:
         errs.append("max_passes must be >=1 and 0<max_delta_s<1")
     if cfg.project.cores < 1:
         errs.append("cores must be >= 1")
+    if not isinstance(cfg.capture.enabled, bool):
+        errs.append("capture.enabled must be true/false")
+    if not (200 <= cfg.capture.width <= 4000 and 200 <= cfg.capture.height <= 4000):
+        errs.append("capture width/height must be within 200..4000 px")
 
     sweepable = set(vars(p))
     names: set[str] = set()

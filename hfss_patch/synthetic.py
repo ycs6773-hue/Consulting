@@ -80,7 +80,33 @@ def _pattern_db(theta: np.ndarray, phi: np.ndarray, cfg: JobConfig, g0_dbi: floa
     return g, co, cross
 
 
-def write_synthetic_results(cfg: JobConfig, out: Path) -> Path:
+def write_placeholder_captures(cfg: JobConfig, out: Path) -> dict[str, str]:
+    """Grey placeholder images standing in for AEDT captures, so the report layout can be previewed."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from .capture import CAPTURE_DIR, CAPTURES, MANIFEST
+
+    d = out / CAPTURE_DIR
+    d.mkdir(parents=True, exist_ok=True)
+    manifest: dict[str, str] = {}
+    for name, (fname, caption) in CAPTURES.items():
+        fig, ax = plt.subplots(figsize=(cfg.capture.width / 200, cfg.capture.height / 200), dpi=100)
+        fig.patch.set_facecolor("#e4e3df")
+        ax.axis("off")
+        ax.text(0.5, 0.55, "AEDT capture placeholder", ha="center", va="center", fontsize=20, color="#52514e")
+        ax.text(0.5, 0.40, f"{name}  —  {SYNTHETIC_TAG}", ha="center", va="center", fontsize=13, color="#c03030")
+        path = d / fname
+        fig.savefig(path, facecolor=fig.get_facecolor())
+        plt.close(fig)
+        manifest[name] = str(path)
+    (d / MANIFEST).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest
+
+
+def write_synthetic_results(cfg: JobConfig, out: Path, captures: bool = True) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     st, p = cfg.setup, cfg.patch
     q, eff = _q_total(cfg)
@@ -145,4 +171,6 @@ def write_synthetic_results(cfg: JobConfig, out: Path) -> Path:
         "synthetic_model": {"Q_total": q, "rad_efficiency": eff, "f_res_ghz": f0},
     }
     (out / "run_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if captures:
+        write_placeholder_captures(cfg, out)
     return out

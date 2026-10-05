@@ -48,3 +48,9 @@ parametrics:
   - {name: Param_L,   variable: L,   start: 28.0, stop: 31.0, step: 0.5}
   - {name: Param_y0,  variable: y0,  start: 8.0,  stop: 13.0, step: 1.0}
   - {name: Param_gap, variable: gap, start: 0.5,  stop: 1.5,  step: 0.5}
+
+# AEDT screen captures for the report (reopens the solved project in graphical mode).
+capture:
+  enabled: true
+  width: 1600
+  height: 1000

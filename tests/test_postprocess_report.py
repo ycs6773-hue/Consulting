@@ -94,7 +94,7 @@ def test_report_end_to_end(results, tmp_path):
     doc = Document(str(doc_path))
     text = "\n".join(p.text for p in doc.paragraphs)
     assert "합성(synthetic)" in text and "NOT FOR DELIVERY" in doc.sections[0].header.paragraphs[0].text
-    assert len(doc.inline_shapes) == 8
+    assert len(doc.inline_shapes) == 8 + 6  # matplotlib figures + placeholder AEDT captures
 
 
 def test_report_missing_files_degrade(tmp_path):

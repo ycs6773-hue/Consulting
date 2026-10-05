@@ -34,6 +34,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="validate config/geometry only, no AEDT")
     ap.add_argument("--no-parametric", action="store_true", help="skip Optimetrics sweeps")
     ap.add_argument("--no-solve", action="store_true", help="build and save the project without solving")
+    cap = ap.add_mutually_exclusive_group()
+    cap.add_argument("--capture", dest="capture", action="store_true", default=None,
+                     help="force AEDT screen captures after the solve (graphical session)")
+    cap.add_argument("--no-capture", dest="capture", action="store_false", help="skip screen captures")
+    cap.add_argument("--capture-only", action="store_true",
+                     help="only reopen the already-solved project and capture images")
     ap.add_argument("--version", dest="aedt_version", help="override AEDT version, e.g. 2025.1")
     ap.add_argument("--cores", type=int, help="override solver cores")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -82,19 +88,34 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     from .builder import HfssJobError, run_job
+    from .capture import run_capture
 
+    do_capture = cfg.capture.enabled if args.capture is None else args.capture
+    failed: list[str] = []
     try:
-        summary = run_job(cfg, run_parametric=not args.no_parametric, solve=not args.no_solve)
+        if not args.capture_only:
+            summary = run_job(cfg, run_parametric=not args.no_parametric, solve=not args.no_solve)
+            logger.info("job finished: %s", summary["status"])
+            failed += [k for k, v in summary.get("exports", {}).items() if str(v).startswith("FAILED")]
+        # Captures need solved fields; a --no-solve run has nothing to show.
+        if args.capture_only or (do_capture and not args.no_solve):
+            try:
+                shots = run_capture(cfg)
+                failed += [f"capture:{k}" for k, v in shots.items() if str(v).startswith("FAILED")]
+            except HfssJobError as exc:
+                if args.capture_only:
+                    raise
+                # Solve/export already succeeded: a capture problem must not fail the job.
+                logger.error("capture stage failed: %s", exc)
+                failed.append("capture")
     except HfssJobError as exc:
         logger.error("job failed: %s", exc)
         return 1
     except ImportError as exc:
         logger.error("PyAEDT not available (pip install ansys-aedt-core): %s", exc)
         return 3
-    logger.info("job finished: %s", summary["status"])
-    failed = [k for k, v in summary.get("exports", {}).items() if str(v).startswith("FAILED")]
     if failed:
-        logger.warning("exports failed: %s", failed)
+        logger.warning("partial failures (results still usable): %s", failed)
         return 4
     return 0
 

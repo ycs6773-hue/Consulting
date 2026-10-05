@@ -47,3 +47,15 @@
 ### L11. 환경: 이 컨테이너의 soffice는 모든 파일 변환 실패("source file could not be loaded")
 - docx 렌더 검증 대신: python-docx 재로딩 + 텍스트 추출 + 그림 PNG 직접 확인.
 - python-docx 기본 템플릿의 settings.xml w:zoom percent 누락은 XSD 경고일 뿐 Word 열기에는 문제 없음.
+
+## 2026-10-05 — 캡처 단계
+
+### L12. AEDT 화면 캡처는 graphical 세션 필수 → 해석과 분리
+- `export_model_picture`, `FieldPlot.export_image`는 docstring상 graphical 모드에서만 동작.
+- 해석은 non-graphical 유지, 캡처는 저장된 .aedt를 `non_graphical=False, remove_lock=True`로 재오픈하는 별도 단계.
+- 캡처 실패가 해석 성공을 덮지 않도록: 항목별 try, 오픈 실패도 해석 후라면 exit 4(부분 실패)로 처리.
+- `export_report_to_jpg(path, plot_name)`: path가 디렉터리가 아니면 그대로 파일명으로 사용됨 → 전체 경로 전달.
+- `create_fieldplot_*`의 `field_type`은 Q3D 전용 — HFSS에서는 무시됨.
+
+### L13. 보고서 그림 번호는 하드코딩 금지
+- 선택적 그림(캡처)이 끼면 번호가 어긋남 → `_Figures` 카운터로 실제 삽입된 그림만 순번 부여.

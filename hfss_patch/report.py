@@ -25,6 +25,7 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 from . import plots
+from .capture import CAPTURE_DIR, CAPTURES, MANIFEST, load_manifest
 from . import postprocess as pp
 from .analytic import design_patch, resonant_frequency
 from .config import ConfigError, JobConfig, load_config
@@ -61,6 +62,8 @@ class ReportData:
     parametric: dict[str, list[dict[str, float]]] = field(default_factory=dict)
     tuning: dict[str, float | None] = field(default_factory=dict)
     figures: dict[str, Path] = field(default_factory=dict)
+    captures: dict[str, Path] = field(default_factory=dict)  # AEDT screen captures
+    capture_status: str = "not run"
     convergence_tail: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
 
@@ -73,6 +76,8 @@ class ReportData:
             "antenna_params": self.antenna,
             "parametric": self.parametric,
             "tuning": self.tuning,
+            "captures": {k: str(v) for k, v in self.captures.items()},
+            "capture_status": self.capture_status,
             "missing": self.missing,
         }
 
@@ -140,6 +145,15 @@ def analyze(cfg: JobConfig, results_dir: Path) -> ReportData:
                 rd.tuning["L_for_f0_mm"] = pp.tune_parameter(rows, "L", cfg.setup.f0)
 
         attempt(f"s11_param_{pc.variable}.csv", do_param)
+
+    rd.captures = load_manifest(results_dir)
+    try:
+        raw = json.loads((results_dir / CAPTURE_DIR / MANIFEST).read_text(encoding="utf-8"))
+        bad = [k for k, v in raw.items() if str(v).startswith("FAILED")]
+        rd.capture_status = f"{len(rd.captures)}/{len(CAPTURES)} captured" + (f", failed: {', '.join(bad)}" if bad else "")
+        rd.missing += [f"capture {k}: {raw[k]}" for k in bad]
+    except (OSError, ValueError):
+        rd.capture_status = "not run (matplotlib figures only)"
 
     rd.convergence_tail = pp.read_text_tail(results_dir / "convergence.prop", 15)
     if not rd.convergence_tail:
@@ -270,13 +284,22 @@ def _table(doc, header: list[str], rows: list[list[Any]], widths_cm: list[float]
     return t
 
 
-def _figure(doc, path: Path | None, caption: str, width_cm: float = 15.0) -> None:
-    if not path or not Path(path).exists():
-        _para(doc, f"[그림 없음: {caption}]", 9, color=INK2)
-        return
-    doc.add_picture(str(path), width=Cm(width_cm))
-    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
-    _para(doc, caption, 9, color=INK2, align=WD_ALIGN_PARAGRAPH.CENTER)
+class _Figures:
+    """Sequential figure numbering; a missing image does not consume a number."""
+
+    def __init__(self) -> None:
+        self.n = 0
+
+    def add(self, doc, path: Path | None, caption: str, width_cm: float = 15.0, optional: bool = False) -> bool:
+        if not path or not Path(path).exists():
+            if not optional:
+                _para(doc, f"[그림 없음: {caption}]", 9, color=INK2)
+            return False
+        doc.add_picture(str(path), width=Cm(width_cm))
+        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self.n += 1
+        _para(doc, f"그림 {self.n}. {caption}", 9, color=INK2, align=WD_ALIGN_PARAGRAPH.CENTER)
+        return True
 
 
 def _fmt(v: float | None, nd: int = 2, unit: str = "") -> str:
@@ -288,6 +311,8 @@ def _fmt(v: float | None, nd: int = 2, unit: str = "") -> str:
 
 def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "", doc_no: str = "") -> Path:
     cfg = rd.cfg
+    fig = _Figures()
+    cap = rd.captures
     doc = Document()
     sec = doc.sections[0]
     sec.page_width, sec.page_height = Cm(21.0), Cm(29.7)
@@ -390,7 +415,9 @@ def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "
         [[f"{p.W:.2f}", f"{p.L:.2f}", f"{p.y0:.2f}", f"{p.gap:.2f}", f"{p.Wf:.2f}", f"{s.h:.2f}",
           f"{cfg.board.Wsub:.0f}×{cfg.board.Lsub:.0f}"]],
     )
-    _figure(doc, rd.figures.get("geometry"), "그림 1. 안테나 형상 (상면도, 단위 mm)", 11)
+    fig.add(doc, rd.figures.get("geometry"), "안테나 형상 및 치수 (상면도, 단위 mm)", 11)
+    for k in ("model_iso", "model_top"):
+        fig.add(doc, cap.get(k), CAPTURES[k][1], 14, optional=True)
 
     # 4. Setup
     _heading(doc, "4. 해석 조건", 1)
@@ -427,8 +454,8 @@ def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "
               f"{_fmt(m.bw10_lo_ghz, 3)}–{_fmt(m.bw10_hi_ghz, 3)} GHz", _fmt(m.bw10_mhz, 1, " MHz"), z,
               _fmt(m.vswr_res, 2)]],
         )
-    _figure(doc, rd.figures.get("s11"), "그림 2. 반사 계수 |S11| (음영: ISM 대역)")
-    _figure(doc, rd.figures.get("smith"), "그림 3. 입력 임피던스 Smith chart", 10)
+    fig.add(doc, rd.figures.get("s11"), "반사 계수 |S11| (음영: ISM 대역)")
+    fig.add(doc, rd.figures.get("smith"), "입력 임피던스 Smith chart", 10)
 
     _heading(doc, "5.2 방사 특성", 2)
     if rd.pattern:
@@ -442,19 +469,27 @@ def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "
         )
     if rd.antenna:
         _para(doc, "Antenna Parameters: " + ", ".join(f"{k} = {v:.2f}" for k, v in rd.antenna.items()), 9, color=INK2)
-    _figure(doc, rd.figures.get("pattern"), "그림 4. 2D 방사 패턴 (E-plane φ=90°, H-plane φ=0°)")
-    _figure(doc, rd.figures.get("gain3d"), "그림 5. 3D 이득 분포 (θ–φ 맵)")
+    fig.add(doc, rd.figures.get("pattern"), "2D 방사 패턴 (E-plane φ=90°, H-plane φ=0°)")
+    fig.add(doc, cap.get("pattern3d"), CAPTURES["pattern3d"][1], 12, optional=True)
+    fig.add(doc, rd.figures.get("gain3d"), "3D 이득 분포 (θ–φ 맵)")
 
-    _heading(doc, "5.3 파라메트릭 민감도", 2)
-    n = 6
+    _heading(doc, "5.3 전류 및 전계 분포", 2)
+    if not any(k in cap for k in ("jsurf", "efield_cut")):
+        _para(doc, "AEDT 필드 캡처가 없습니다 (캡처 단계 미실행 또는 실패 — 부록의 캡처 상태 참조).", 9, color=INK2)
+    else:
+        _para(doc, "TM010 모드에서는 표면 전류가 급전 방향(y)으로 흐르고, 전계는 두 방사 엣지(y = ±L/2)에서 최대가 됩니다.",
+              9, color=INK2)
+    for k in ("jsurf", "efield_cut"):
+        fig.add(doc, cap.get(k), CAPTURES[k][1], 14, optional=True)
+
+    _heading(doc, "5.4 파라메트릭 민감도", 2)
     for var, rows in rd.parametric.items():
         _table(
             doc,
             [f"{var} [mm]", "공진 주파수 [GHz]", "최소 |S11| [dB]", "-10 dB BW [MHz]"],
             [[f"{r[var]:g}", f"{r['f_res_ghz']:.3f}", f"{r['s11_min_db']:.1f}", _fmt(r["bw10_mhz"], 1)] for r in rows],
         )
-        _figure(doc, rd.figures.get(f"param_{var}"), f"그림 {n}. {var} 파라메트릭 스윕 |S11|")
-        n += 1
+        fig.add(doc, rd.figures.get(f"param_{var}"), f"{var} 파라메트릭 스윕 |S11|")
     if rd.tuning.get("L_for_f0_mm"):
         _para(doc, f"L 민감도 선형 근사 결과, f0 = {cfg.setup.f0} GHz 공진을 위한 L ≈ {rd.tuning['L_for_f0_mm']:.2f} mm.")
 
@@ -486,10 +521,14 @@ def build_docx(rd: ReportData, out: Path, spec: Spec = Spec(), customer: str = "
             ["설정 SHA-256", cfg.sha256[:16] + "…"],
             ["AEDT 버전", str(rd.run.get("aedt_version", "—"))],
             ["실행 상태", str(rd.run.get("status", "—"))],
+            ["AEDT 캡처", rd.capture_status],
             ["누락/경고", "; ".join(rd.missing) or "없음"],
         ],
         [4, 11],
     )
+    if "s11_report" in cap:
+        _para(doc, "AEDT 원본 리포트 화면 (수치 교차 확인용)", 9, True)
+        fig.add(doc, cap["s11_report"], CAPTURES["s11_report"][1], 14)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out))
